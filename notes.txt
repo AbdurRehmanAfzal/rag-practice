@@ -1,0 +1,8 @@
+Abdur Rehman is a Senior Backend Python Engineer with around 7 years of experience.
+He specializes in Django, FastAPI, React, and Next.js for full-stack development.
+He has worked on RAG and LangChain based AI projects.
+He is based in Lahore, Pakistan and is open to remote and GCC opportunities.
+He built a luxury real estate website called b1properties.ae for a client in Dubai.
+He also built workfly.app, which is a multi-tenant SaaS platform.
+His personal portfolio website is hosted at abdurrehmanafzal.cloud.
+He is currently learning AI Engineering concepts from scratch, including RAG and vector databases.
