@@ -15,6 +15,9 @@ A small practice project for learning how **Retrieval-Augmented Generation (RAG)
 ```
 rag-practice/
 ├── rag.py               # Main FastAPI app — the RAG chatbot API (run this)
+├── final-rag-bot.py      # Fuller bot: ChromaDB, tool calling, lead capture, guardrails, /evaluate
+├── retrieval.py          # Upgraded retrieval engine — recursive chunking + hybrid search + reranking
+├── evaluate_rag.py       # RAGAS-style eval harness — scores naive vs upgraded retrieval
 ├── rag_pipeline.py       # Standalone CLI script — same RAG logic, single question via terminal input
 ├── test_embeddings.py    # Small script to sanity-check embeddings & cosine similarity
 ├── knowledge_base.txt    # The source text the chatbot retrieves answers from
@@ -77,7 +80,60 @@ A simple chat interface (vanilla HTML/CSS/JS, no framework). It:
    ```
    Then open `http://127.0.0.1:8000` in your browser.
 
+## Upgraded retrieval pipeline (`retrieval.py` + `evaluate_rag.py`)
+
+The base `rag.py` uses the beginner retrieval path: a naive blank-line chunk split
+and a single-shot dense cosine search. `retrieval.py` upgrades that into a
+production-shaped pipeline, and `evaluate_rag.py` proves the improvement with numbers.
+
+### `retrieval.py` — production-shaped retrieval
+
+Three upgrades over the baseline, all dependency-light (`sentence-transformers` +
+`scikit-learn` + `numpy`, nothing new to install):
+
+1. **Recursive chunking with overlap** — packs sentences up to a target size and
+   carries an overlap window between chunks, instead of splitting on blank lines
+   (which produced uneven, context-losing chunks — one was 1132 chars vs a clean
+   ~560 cap after the upgrade).
+2. **Hybrid retrieval** — blends dense (embedding) similarity with sparse (TF-IDF)
+   similarity, so exact keywords (names, acronyms) *and* semantic meaning both count.
+3. **Cross-encoder reranking** — a `cross-encoder/ms-marco-MiniLM-L-6-v2` model
+   rereads each `(query, chunk)` pair jointly and reorders the top candidates for
+   precision. This runs only on the ~10 candidates the hybrid stage already narrowed.
+
+The `Retriever` class exposes both `naive_search()` (baseline) and `search()`
+(upgraded) so the two can be measured head-to-head.
+
+### `evaluate_rag.py` — RAGAS-style evaluation
+
+Instead of a keyword-match check, this scores retrieval + generation with an
+**LLM-as-judge** on three metrics (0.0–1.0): **context precision**, **faithfulness**,
+and **answer relevance**. It runs the same question set through the naive and the
+upgraded pipeline and prints a before/after table.
+
+```bash
+python evaluate_rag.py
+```
+
+Measured result on the current knowledge base:
+
+| metric            | naive | upgraded | delta  |
+|-------------------|-------|----------|--------|
+| context_precision | 0.53  | 0.80     | +0.27  |
+| faithfulness      | 1.00  | 1.00     |  0.00  |
+| answer_relevance  | 0.60  | 0.90     | +0.30  |
+| **OVERALL**       | **0.71** | **0.90** | **+0.19** |
+
+Overall RAG quality went **0.71 → 0.90** after adding recursive chunking, hybrid
+retrieval, and reranking — with faithfulness already at 1.00, confirming the
+bottleneck was *retrieval*, not generation.
+
+> Note: `evaluate_rag.py` makes ~60 `gpt-4o-mini` calls (cheap) and needs
+> `OPENAI_API_KEY` in `.env`. Expand `TEST_QUESTIONS` for a more stable score.
+
 ## Notes
 
-- The embedding model (`all-MiniLM-L6-v2`) downloads automatically on first run and is cached locally.
-- This is a learning project — chunking is naive (blank-line split), and there's no vector database; everything is held in memory for simplicity.
+- The embedding model (`all-MiniLM-L6-v2`) and the reranker (`ms-marco-MiniLM-L-6-v2`)
+  download automatically on first run and are cached locally.
+- `rag.py` is the simple in-memory learning version; `retrieval.py` is the upgraded,
+  measured pipeline built on top of the same knowledge base.
